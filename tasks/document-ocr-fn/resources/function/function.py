@@ -1,13 +1,19 @@
 from typing import Any
 from pathlib import Path
 
+import time
+
 from coretex import functions
 
-import detect_document
-from model import loadSegmentationModel, getObjectDetectionModel
-from image_segmentation import processMask, segmentImage, segmentDetections
-from ocr import performOCR
-from object_detection import runObjectDetection
+from src import detect_document
+from src.model import loadSegmentationModel, loadDetectionModel
+from src.image_segmentation import processMask, segmentImage, segmentDetections
+from src.ocr import performOCR
+from src.object_detection import runObjectDetection
+
+
+def current() -> int:
+    return int(time.time() * 1000)
 
 
 DOCUMENT_NOT_FOUND = {
@@ -17,31 +23,56 @@ DOCUMENT_NOT_FOUND = {
     }
 }
 
+modelsDir = Path.cwd().parent
+
+start = current()
+segmentationModel = loadSegmentationModel(modelsDir / "segmentationModel")
+print(f"[loadSegmentationModel] {current() - start}")
+
+start = current()
+objDetModelWeights = loadDetectionModel(modelsDir / "detectionModel")
+print(f"[loadDetectionModel] {current() - start}")
+
 
 def response(requestData: dict[str, Any]) -> dict[str, Any]:
-    modelsDir = requestData.get("model")
-
-    segmentationModel = loadSegmentationModel(modelsDir / "segmentationModel")
-    objDetModelWeights = getObjectDetectionModel(modelsDir / "objectDetectionModel")
-
     imagePath = requestData.get("image")
     if not isinstance(imagePath, Path):
         return functions.badRequest("Input image is invalid")
 
+    start = current()
     predictedMask = detect_document.run(segmentationModel, imagePath)
+    print(f"[detect_document.run] {current() - start}")
+
+    start = current()
     predictedMask = processMask(predictedMask)
+    print(f">> [processMask] {current() - start}")
+
     if predictedMask is None:
         return DOCUMENT_NOT_FOUND
 
+    start = current()
     segmentedImage = segmentImage(imagePath, predictedMask)
+    print(f">> [segmentImage] {current() - start}")
+
     if segmentedImage is None:
         return DOCUMENT_NOT_FOUND
 
+    start = current()
     bboxes, classes = runObjectDetection(segmentedImage, objDetModelWeights)
+    print(f">> [runObjectDetection] {current() - start}")
+
+    start = current()
     segmentedDetections = segmentDetections(segmentedImage, bboxes)
+    print(f">> [segmentDetections] {current() - start}")
 
+    start = current()
     result = performOCR(segmentedDetections, classes)
+    print(f">> [performOCR] {current() - start}")
 
-    return functions.success({
-        "result": result
-    })
+    return functions.success(result)
+
+
+if __name__ == "__main__":
+    print(response({
+        "image": Path.home().joinpath("Downloads", "MicrosoftTeams-image (4).png")
+    }))

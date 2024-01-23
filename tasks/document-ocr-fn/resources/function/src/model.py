@@ -4,8 +4,6 @@ from ultralytics import YOLO
 
 import tensorflow as tf
 
-from coretex import Model
-
 
 def loadSegmentationModel(modelDir: Path) -> tf.lite.Interpreter:
     modelPath = modelDir / "model.tflite"
@@ -16,5 +14,5 @@ def loadSegmentationModel(modelDir: Path) -> tf.lite.Interpreter:
     return interpreter
 
 
-def getObjectDetectionModel(modelPath) -> Path:
+def loadDetectionModel(modelPath) -> YOLO:
     return YOLO(modelPath / "best.pt")
